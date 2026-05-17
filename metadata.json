@@ -1,0 +1,6 @@
+{
+  "name": "ITSM-INNOVASAL",
+  "description": "Sistema de gestión de servicios de TI (ITSM) con inventario de activos, gestión de clientes y contactos, y control de acceso basado en roles (RBAC). Optimizado para dispositivos móviles y tabletas.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}
