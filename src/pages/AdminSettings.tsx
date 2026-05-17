@@ -4,11 +4,13 @@ import { Settings, Plus, Loader2, CheckCircle2, XCircle, Trash2, Edit2, Save, X,
 import { motion, AnimatePresence } from 'motion/react';
 import { useAuth } from '../hooks/useAuth';
 import { StatusToggleButton } from '../components/StatusToggleButton';
+import { FeedbackAlert } from '../components/FeedbackAlert';
 import { cn } from '../lib/utils';
 
 interface LookupItem {
   id: number;
   name: string;
+  description?: string;
   is_active: boolean;
 }
 
@@ -26,6 +28,8 @@ const TABLES: TableConfig[] = [
   { id: 'asset_status', name: 'Estados de Activos', table: 'asset_status' },
   { id: 'service_categories', name: 'Categorías de Servicio', table: 'service_categories' },
   { id: 'service_priorities', name: 'Prioridades de Servicio', table: 'service_priorities' },
+  { id: 'service_types', name: 'Tipos de Servicio', table: 'service_types' },
+  { id: 'service_request_channels', name: 'Canales de Solicitud', table: 'service_request_channels' },
 ];
 
 export function AdminSettings() {
@@ -35,12 +39,15 @@ export function AdminSettings() {
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editName, setEditName] = useState('');
+  const [editDescription, setEditDescription] = useState('');
   const [editDeptId, setEditDeptId] = useState<string>('');
   const [newItemName, setNewItemName] = useState('');
+  const [newItemDescription, setNewItemDescription] = useState('');
   const [adding, setAdding] = useState(false);
   const [updatingId, setUpdatingId] = useState<number | null>(null);
   const [departments, setDepartments] = useState<LookupItem[]>([]);
   const [selectedDeptId, setSelectedDeptId] = useState<string>('');
+  const [pageMessage, setPageMessage] = useState<{ type: 'success' | 'error' | 'info' | 'warning', text: string } | null>(null);
 
   useEffect(() => {
     if (!authLoading && isAdmin) {
@@ -66,13 +73,13 @@ export function AdminSettings() {
         query = supabase.from('districts').select('*, departments(name)');
       }
 
-      const { data, error } = await query.order('name');
+      const { data, error } = await query.order('id', { ascending: true });
       
       if (error) throw error;
       setItems(data || []);
     } catch (error: any) {
       console.error('Error fetching items:', error);
-      alert(`Error al cargar datos: ${error.message}`);
+      setPageMessage({ type: 'error', text: `Error al cargar datos: ${error.message}` });
     } finally {
       setLoading(false);
     }
@@ -83,15 +90,20 @@ export function AdminSettings() {
     if (!newItemName.trim()) return;
 
     setAdding(true);
+    setPageMessage(null);
     try {
       const payload: any = { name: newItemName.trim() };
       if (activeTable.id === 'districts') {
         if (!selectedDeptId) {
-          alert('Por favor, selecciona un departamento');
+          setPageMessage({ type: 'warning', text: 'Por favor, selecciona un departamento' });
           setAdding(false);
           return;
         }
         payload.department_id = parseInt(selectedDeptId);
+      }
+      
+      if (activeTable.id === 'service_request_channels' || activeTable.id === 'service_types') {
+        payload.description = newItemDescription.trim();
       }
 
       const { error } = await supabase
@@ -104,10 +116,13 @@ export function AdminSettings() {
       }
 
       setNewItemName('');
+      setNewItemDescription('');
+      setPageMessage({ type: 'success', text: 'Registro añadido correctamente.' });
+      setTimeout(() => setPageMessage(null), 3000);
       fetchItems();
     } catch (error: any) {
       console.error('Error adding item:', error);
-      alert(`Error al añadir: ${error.message}`);
+      setPageMessage({ type: 'error', text: `Error al añadir: ${error.message}` });
     } finally {
       setAdding(false);
     }
@@ -119,6 +134,7 @@ export function AdminSettings() {
     }
 
     setUpdatingId(id);
+    setPageMessage(null);
     try {
       const { error } = await supabase
         .from(activeTable.table)
@@ -130,10 +146,12 @@ export function AdminSettings() {
         throw error;
       }
 
+      setPageMessage({ type: 'success', text: 'Registro eliminado permanentemente.' });
+      setTimeout(() => setPageMessage(null), 3000);
       fetchItems();
     } catch (error: any) {
       console.error('Error deleting item:', error);
-      alert(`Error al eliminar: ${error.message}`);
+      setPageMessage({ type: 'error', text: `Error al eliminar: ${error.message}` });
     } finally {
       setUpdatingId(null);
     }
@@ -143,10 +161,15 @@ export function AdminSettings() {
     if (!editName.trim()) return;
 
     setUpdatingId(id);
+    setPageMessage(null);
     try {
       const payload: any = { name: editName.trim() };
       if (activeTable.id === 'districts' && editDeptId) {
         payload.department_id = parseInt(editDeptId);
+      }
+
+      if (activeTable.id === 'service_request_channels' || activeTable.id === 'service_types') {
+        payload.description = editDescription.trim();
       }
 
       const { error } = await supabase
@@ -156,10 +179,12 @@ export function AdminSettings() {
 
       if (error) throw error;
       setEditingId(null);
+      setPageMessage({ type: 'success', text: 'Cambios guardados correctamente.' });
+      setTimeout(() => setPageMessage(null), 3000);
       fetchItems();
     } catch (error: any) {
       console.error('Error updating item:', error);
-      alert(`Error al actualizar: ${error.message}`);
+      setPageMessage({ type: 'error', text: `Error al actualizar: ${error.message}` });
     } finally {
       setUpdatingId(null);
     }
@@ -167,6 +192,7 @@ export function AdminSettings() {
 
   const handleToggleStatus = async (item: LookupItem) => {
     setUpdatingId(item.id);
+    setPageMessage(null);
     try {
       const { error } = await supabase
         .from(activeTable.table)
@@ -174,10 +200,12 @@ export function AdminSettings() {
         .eq('id', item.id);
 
       if (error) throw error;
+      setPageMessage({ type: 'success', text: `Estado de "${item.name}" actualizado.` });
+      setTimeout(() => setPageMessage(null), 2500);
       fetchItems();
     } catch (error: any) {
       console.error('Error toggling status:', error);
-      alert(`Error al cambiar estado: ${error.message}`);
+      setPageMessage({ type: 'error', text: `Error al cambiar estado: ${error.message}` });
     } finally {
       setUpdatingId(null);
     }
@@ -211,6 +239,18 @@ export function AdminSettings() {
 
   return (
     <div className="space-y-8">
+      <AnimatePresence mode="wait">
+        {pageMessage && (
+          <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[100] w-full max-w-md px-4">
+            <FeedbackAlert 
+              type={pageMessage.type as any} 
+              message={pageMessage.text} 
+              onClose={() => setPageMessage(null)}
+            />
+          </div>
+        )}
+      </AnimatePresence>
+
       <header className="flex flex-col md:flex-row justify-between items-start md:items-center h-16 border-b border-slate-200 -mx-6 px-6 -mt-8 bg-white mb-8">
         <div className="flex items-center space-x-2 text-sm">
           <span className="text-slate-400">Administración /</span>
@@ -246,29 +286,42 @@ export function AdminSettings() {
                 <p className="text-sm text-slate-500">Gestiona los valores permitidos para {activeTable.name.toLowerCase()}.</p>
               </div>
 
-              <form onSubmit={handleAddItem} className="flex flex-wrap gap-2 w-full md:w-auto">
-                {activeTable.id === 'districts' && (
-                  <select
-                    className="input py-2 text-sm min-w-[150px]"
-                    value={selectedDeptId}
-                    onChange={(e) => setSelectedDeptId(e.target.value)}
+              <form onSubmit={handleAddItem} className="flex flex-col md:flex-row gap-2 w-full md:w-auto items-end">
+                <div className="flex gap-2 w-full md:w-auto">
+                  {activeTable.id === 'districts' && (
+                    <select
+                      className="input py-2 text-sm min-w-[150px]"
+                      value={selectedDeptId}
+                      onChange={(e) => setSelectedDeptId(e.target.value)}
+                      required
+                    >
+                      <option value="">Departamento...</option>
+                      {departments.map(d => (d as any).is_active !== false && (
+                        <option key={d.id} value={d.id}>{d.name}</option>
+                      ))}
+                    </select>
+                  )}
+                  <input
+                    type="text"
+                    placeholder={`Nuevo ${activeTable.id.split('_').pop()?.slice(0, -1) || 'item'}`}
+                    className="input py-2 flex-grow md:flex-grow-0"
+                    value={newItemName}
+                    onChange={(e) => setNewItemName(e.target.value)}
                     required
-                  >
-                    <option value="">Departamento...</option>
-                    {departments.map(d => (
-                      <option key={d.id} value={d.id}>{d.name}</option>
-                    ))}
-                  </select>
+                  />
+                </div>
+                
+                {(activeTable.id === 'service_request_channels' || activeTable.id === 'service_types') && (
+                  <input
+                    type="text"
+                    placeholder="Descripción breve..."
+                    className="input py-2 w-full md:w-64"
+                    value={newItemDescription}
+                    onChange={(e) => setNewItemDescription(e.target.value)}
+                  />
                 )}
-                <input
-                  type="text"
-                  placeholder={`Nuevo ${activeTable.id.slice(0, -1)}`}
-                  className="input py-2"
-                  value={newItemName}
-                  onChange={(e) => setNewItemName(e.target.value)}
-                  required
-                />
-                <button type="submit" disabled={adding} className="btn-primary py-2 px-4 whitespace-nowrap">
+
+                <button type="submit" disabled={adding} className="btn-primary py-2 px-4 whitespace-nowrap h-10">
                   {adding ? <Loader2 className="animate-spin" size={18} /> : <Plus size={18} />}
                   <span className="ml-1.5 font-bold">Añadir</span>
                 </button>
@@ -287,7 +340,7 @@ export function AdminSettings() {
                   <table className="w-full text-left">
                     <thead>
                       <tr className="bg-white border-b border-slate-100">
-                        <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase tracking-widest w-20">ID</th>
+                        <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase tracking-widest w-20">#</th>
                         <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase tracking-widest">Nombre</th>
                         <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase tracking-widest text-center w-32">Estado</th>
                         <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase tracking-widest text-right w-40">Acciones</th>
@@ -328,12 +381,27 @@ export function AdminSettings() {
                                     onChange={(e) => setEditName(e.target.value)}
                                     onKeyDown={(e) => e.key === 'Enter' && handleUpdateItem(item.id)}
                                   />
+                                  {(activeTable.id === 'service_request_channels' || activeTable.id === 'service_types') && (
+                                    <input
+                                      type="text"
+                                      placeholder="Descripción..."
+                                      className="input py-1 px-2 text-[10px] italic"
+                                      value={editDescription}
+                                      onChange={(e) => setEditDescription(e.target.value)}
+                                      onKeyDown={(e) => e.key === 'Enter' && handleUpdateItem(item.id)}
+                                    />
+                                  )}
                                 </div>
                               ) : (
                                 <div className="flex flex-col">
                                   <span className={`text-sm font-semibold ${item.is_active ? 'text-slate-700' : 'text-slate-400 line-through'}`}>
                                     {item.name}
                                   </span>
+                                  {(activeTable.id === 'service_request_channels' || activeTable.id === 'service_types') && item.description && (
+                                    <span className="text-[11px] text-slate-400 mt-0.5 line-clamp-1">
+                                      {item.description}
+                                    </span>
+                                  )}
                                   {(item as any).departments && (
                                     <span className="text-[10px] text-blue-500 font-bold uppercase tracking-widest mt-0.5">
                                       {(item as any).departments.name}
@@ -375,6 +443,7 @@ export function AdminSettings() {
                                       onClick={() => {
                                         setEditingId(item.id);
                                         setEditName(item.name);
+                                        setEditDescription(item.description || '');
                                         if (activeTable.id === 'districts') {
                                           setEditDeptId((item as any).department_id?.toString() || '');
                                         }
@@ -466,6 +535,18 @@ export function AdminSettings() {
                                 onChange={(e) => setEditName(e.target.value)}
                               />
                             </div>
+
+                            {(activeTable.id === 'service_request_channels' || activeTable.id === 'service_types') && (
+                              <div className="space-y-1">
+                                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-1">Descripción</label>
+                                <input
+                                  type="text"
+                                  className="input w-full"
+                                  value={editDescription}
+                                  onChange={(e) => setEditDescription(e.target.value)}
+                                />
+                              </div>
+                            )}
                           </div>
                         ) : (
                           <div className="flex flex-col gap-4">
@@ -481,6 +562,9 @@ export function AdminSettings() {
                                   </span>
                                 </div>
                                 <h4 className={`font-bold text-slate-800 ${!item.is_active && 'text-slate-400 line-through'}`}>{item.name}</h4>
+                                {(activeTable.id === 'service_request_channels' || activeTable.id === 'service_types') && item.description && (
+                                  <p className="text-[11px] text-slate-500 leading-relaxed italic">{item.description}</p>
+                                )}
                                 {(item as any).departments && (
                                   <div className="flex items-center gap-1.5">
                                     <span className="w-1 h-1 rounded-full bg-blue-500"></span>
@@ -496,6 +580,7 @@ export function AdminSettings() {
                                   onClick={() => {
                                     setEditingId(item.id);
                                     setEditName(item.name);
+                                    setEditDescription(item.description || '');
                                     if (activeTable.id === 'districts') {
                                       setEditDeptId((item as any).department_id?.toString() || '');
                                     }

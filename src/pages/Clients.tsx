@@ -20,10 +20,12 @@ import {
   ShieldCheck,
   Tag,
   Map,
-  BadgeCheck
+  BadgeCheck,
+  Info
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { StatusToggleButton } from '../components/StatusToggleButton';
+import { FeedbackAlert } from '../components/FeedbackAlert';
 import { cn } from '../lib/utils';
 import { useAuth } from '../hooks/useAuth';
 
@@ -32,6 +34,9 @@ export function Clients() {
   const canManage = isAdmin || isGerente;
 
   const [clients, setClients] = useState<Client[]>([]);
+  const [allContacts, setAllContacts] = useState<(Contact & { clients?: { name: string } })[]>([]);
+  const [allCustodians, setAllCustodians] = useState<(Custodian & { clients?: { name: string } })[]>([]);
+  const [activeTab, setActiveTab] = useState<'clients' | 'contacts' | 'responsibles'>('clients');
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [loading, setLoading] = useState(true);
@@ -70,6 +75,10 @@ export function Clients() {
   const [submittingCustodian, setSubmittingCustodian] = useState(false);
   const [updatingCustodianId, setUpdatingCustodianId] = useState<string | null>(null);
 
+  // Alert State
+  const [pageMessage, setPageMessage] = useState<{ type: 'success' | 'alert' | 'error' | 'info' | 'warning', text: string } | null>(null);
+  const [modalMessage, setModalMessage] = useState<{ type: 'success' | 'alert' | 'error' | 'info' | 'warning', text: string } | null>(null);
+
   const [departments, setDepartments] = useState<Department[]>([]);
   const [districts, setDistricts] = useState<District[]>([]);
   const [filteredDistricts, setFilteredDistricts] = useState<District[]>([]);
@@ -88,9 +97,41 @@ export function Clients() {
   });
 
   useEffect(() => {
-    fetchClients();
+    fetchAllData();
     fetchGeography();
   }, []);
+
+  const fetchAllData = async () => {
+    setLoading(true);
+    await Promise.all([
+      fetchClients(),
+      fetchAllContacts(),
+      fetchAllCustodians()
+    ]);
+    setLoading(false);
+  };
+
+  const fetchAllContacts = async () => {
+    const { data, error } = await supabase
+      .from('contacts')
+      .select('*, clients(name)')
+      .order('full_name');
+    
+    if (!error && data) {
+      setAllContacts(data as any);
+    }
+  };
+
+  const fetchAllCustodians = async () => {
+    const { data, error } = await supabase
+      .from('client_custodians')
+      .select('*, clients(name)')
+      .order('full_name');
+    
+    if (!error && data) {
+      setAllCustodians(data as any);
+    }
+  };
 
   useEffect(() => {
     if (selectedClient) {
@@ -131,8 +172,11 @@ export function Clients() {
 
       if (error) throw error;
       setCustodians(prev => prev.map(c => c.id === custodian.id ? { ...c, is_active: newStatus } : c));
+      await fetchAllCustodians();
+      setPageMessage({ type: 'success', text: `Responsable ${newStatus ? 'activado' : 'desactivado'} correctamente.` });
+      setTimeout(() => setPageMessage(null), 3000);
     } catch (err: any) {
-      alert(`Error: ${err.message}`);
+      setPageMessage({ type: 'error', text: `Error: ${err.message}` });
     } finally {
       setUpdatingCustodianId(null);
     }
@@ -160,6 +204,7 @@ export function Clients() {
         is_active: true
       });
     }
+    setModalMessage(null);
     setIsCustodiansModalOpen(true);
   };
 
@@ -168,6 +213,7 @@ export function Clients() {
     if (!selectedClient || submittingCustodian) return;
 
     setSubmittingCustodian(true);
+    setModalMessage(null);
     try {
       const payload = {
         client_id: selectedClient.id,
@@ -193,11 +239,16 @@ export function Clients() {
       }
 
       await fetchCustodians(selectedClient.id);
+      await fetchAllCustodians();
+      setPageMessage({ 
+        type: 'success', 
+        text: editingCustodian ? 'Información del responsable actualizada correctamente.' : 'Nuevo responsable registrado exitosamente.' 
+      });
       setIsCustodiansModalOpen(false);
       setEditingCustodian(null);
-      alert(editingCustodian ? 'Custodio actualizado' : 'Custodio registrado');
+      setTimeout(() => setPageMessage(null), 4000);
     } catch (err: any) {
-      alert(`Error: ${err.message}`);
+      setModalMessage({ type: 'error', text: `Error: ${err.message}` });
     } finally {
       setSubmittingCustodian(false);
     }
@@ -232,8 +283,11 @@ export function Clients() {
 
       if (error) throw error;
       setContacts(prev => prev.map(c => c.id === contact.id ? { ...c, is_active: newStatus } : c));
+      await fetchAllContacts();
+      setPageMessage({ type: 'success', text: `Contacto ${newStatus ? 'activado' : 'desactivado'} correctamente.` });
+      setTimeout(() => setPageMessage(null), 3000);
     } catch (err: any) {
-      alert(`Error: ${err.message}`);
+      setPageMessage({ type: 'error', text: `Error: ${err.message}` });
     } finally {
       setUpdatingContactId(null);
     }
@@ -259,6 +313,7 @@ export function Clients() {
         is_active: true
       });
     }
+    setModalMessage(null);
     setIsContactsModalOpen(true);
   };
 
@@ -267,6 +322,7 @@ export function Clients() {
     if (!selectedClient || submittingContact) return;
 
     setSubmittingContact(true);
+    setModalMessage(null);
     try {
       const payload = {
         client_id: selectedClient.id,
@@ -291,12 +347,17 @@ export function Clients() {
       }
 
       await fetchContacts(selectedClient.id);
+      await fetchAllContacts();
+      setPageMessage({ 
+        type: 'success', 
+        text: editingContact ? 'Información de contacto actualizada correctamente.' : 'Nuevo contacto registrado exitosamente.' 
+      });
       setIsContactsModalOpen(false);
       setEditingContact(null);
       setContactFormData({ full_name: '', email: '', phone: '', position: '', is_active: true });
-      alert(editingContact ? 'Contacto actualizado' : 'Contacto registrado');
+      setTimeout(() => setPageMessage(null), 4000);
     } catch (err: any) {
-      alert(`Error: ${err.message}`);
+      setModalMessage({ type: 'error', text: `Error: ${err.message}` });
     } finally {
       setSubmittingContact(false);
     }
@@ -335,6 +396,7 @@ export function Clients() {
   };
 
   const handleOpenModal = (client?: Client) => {
+    setModalMessage(null);
     if (client) {
       setEditingClient(client);
       setFormData({
@@ -366,16 +428,17 @@ export function Clients() {
 
     // Validación básica de campos requeridos (además de HTML5)
     if (!formData.name.trim()) {
-      alert('El nombre o razón social es obligatorio.');
+      setModalMessage({ type: 'warning', text: 'El nombre o razón social es obligatorio.' });
       return;
     }
 
     if (!formData.department_id || !formData.district_id) {
-      alert('Por favor selecciona un departamento y un distrito.');
+      setModalMessage({ type: 'warning', text: 'Por favor selecciona un departamento y un distrito.' });
       return;
     }
 
     setSubmitting(true);
+    setModalMessage(null);
     console.log('Starting client registration process...');
 
     try {
@@ -399,7 +462,7 @@ export function Clients() {
         }
 
         if (existingClient) {
-          alert(`Ya existe un cliente registrado con el nombre: ${nameTrimmed}`);
+          setModalMessage({ type: 'error', text: `Ya existe un cliente registrado con el nombre: ${nameTrimmed}` });
           setSubmitting(false);
           return;
         }
@@ -447,16 +510,20 @@ export function Clients() {
         economic_activity: '', address: '', department_id: '',
         district_id: '', email: '', phone: ''
       });
-      await fetchClients();
+      await fetchAllData();
       if (selectedClient && editingClient?.id === selectedClient.id) {
         // Refresh selected client details
         const { data: refreshed } = await supabase.from('clients').select('*, departments(name), districts(name)').eq('id', selectedClient.id).single();
         if (refreshed) setSelectedClient(refreshed);
       }
-      alert(editingClient ? 'Cliente actualizado exitosamente' : 'Cliente registrado exitosamente');
+      setPageMessage({ 
+        type: 'success', 
+        text: editingClient ? 'Datos del cliente actualizados exitosamente.' : 'Cliente registrado exitosamente en el sistema.' 
+      });
+      setTimeout(() => setPageMessage(null), 4000);
     } catch (err: any) {
       console.error('Unexpected error in handleRegisterClient:', err);
-      alert(`Error al registrar cliente: ${err.message || 'Error desconocido'}\n\nDetalles: ${err.details || ''}`);
+      setModalMessage({ type: 'error', text: `Error al registrar cliente: ${err.message || 'Error desconocido'}` });
     } finally {
       setSubmitting(false);
     }
@@ -473,8 +540,10 @@ export function Clients() {
 
       if (error) throw error;
       setClients(prev => prev.map(c => c.id === client.id ? { ...c, is_active: newStatus } : c));
+      setPageMessage({ type: 'success', text: `Cliente ${client.name} ${newStatus ? 'activado' : 'desactivado'} correctamente.` });
+      setTimeout(() => setPageMessage(null), 3000);
     } catch (err: any) {
-      alert(`Error al actualizar estado: ${err.message}`);
+      setPageMessage({ type: 'error', text: `Error al actualizar estado: ${err.message}` });
     } finally {
       setUpdatingId(null);
     }
@@ -486,8 +555,37 @@ export function Clients() {
     (c.nit && c.nit.includes(search))
   );
 
+  const filteredContacts = !selectedClient ? [] : allContacts.filter(c => 
+    c.client_id === selectedClient.id && (
+      c.full_name.toLowerCase().includes(search.toLowerCase()) ||
+      (c.email && c.email.toLowerCase().includes(search.toLowerCase())) ||
+      (c.position && c.position.toLowerCase().includes(search.toLowerCase()))
+    )
+  );
+
+  const filteredCustodians = !selectedClient ? [] : allCustodians.filter(c => 
+    c.client_id === selectedClient.id && (
+      c.full_name.toLowerCase().includes(search.toLowerCase()) ||
+      (c.email && c.email.toLowerCase().includes(search.toLowerCase())) ||
+      (c.job_title && c.job_title.toLowerCase().includes(search.toLowerCase())) ||
+      (c.department && c.department.toLowerCase().includes(search.toLowerCase()))
+    )
+  );
+
   return (
     <div className="space-y-6">
+      <AnimatePresence>
+        {pageMessage && (
+          <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[100] w-full max-w-md px-4">
+            <FeedbackAlert 
+              type={pageMessage.type as any} 
+              message={pageMessage.text} 
+              onClose={() => setPageMessage(null)}
+            />
+          </div>
+        )}
+      </AnimatePresence>
+
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Clientes</h1>
@@ -503,15 +601,51 @@ export function Clients() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
-            <input 
-              type="text" 
-              placeholder="Buscar por nombre, NIT o nombre comercial..."
-              className="input pl-10 w-full"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
+          <div className="flex flex-col gap-4">
+            <div className="flex p-1 bg-slate-100 rounded-2xl w-fit">
+              <button 
+                onClick={() => setActiveTab('clients')}
+                className={cn(
+                  "px-4 py-2 text-xs font-bold uppercase tracking-widest rounded-xl transition-all",
+                  activeTab === 'clients' ? "bg-white text-blue-600 shadow-sm" : "text-slate-500 hover:text-slate-700"
+                )}
+              >
+                Clientes
+              </button>
+              <button 
+                onClick={() => setActiveTab('contacts')}
+                className={cn(
+                  "px-4 py-2 text-xs font-bold uppercase tracking-widest rounded-xl transition-all",
+                  activeTab === 'contacts' ? "bg-white text-blue-600 shadow-sm" : "text-slate-500 hover:text-slate-700"
+                )}
+              >
+                Contactos
+              </button>
+              <button 
+                onClick={() => setActiveTab('responsibles')}
+                className={cn(
+                  "px-4 py-2 text-xs font-bold uppercase tracking-widest rounded-xl transition-all",
+                  activeTab === 'responsibles' ? "bg-white text-blue-600 shadow-sm" : "text-slate-500 hover:text-slate-700"
+                )}
+              >
+                Responsables
+              </button>
+            </div>
+
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
+              <input 
+                type="text" 
+                placeholder={
+                  activeTab === 'clients' ? "Buscar por nombre, NIT o nombre comercial..." :
+                  activeTab === 'contacts' ? "Buscar contacto por nombre, email o cargo..." :
+                  "Buscar responsable por nombre, email, dpto o cargo..."
+                }
+                className="input pl-10 w-full"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
           </div>
 
           <div className="card shadow-sm border-slate-200 overflow-hidden">
@@ -519,95 +653,221 @@ export function Clients() {
             <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-left">
                 <thead className="bg-slate-50 border-b border-slate-100">
-                  <tr>
-                    <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Cliente</th>
-                    <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-center">Estado</th>
-                    <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-right">Acciones</th>
-                  </tr>
+                  {activeTab === 'clients' ? (
+                    <tr>
+                      <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Cliente</th>
+                      <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-center">Estado</th>
+                      <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-right">Acciones</th>
+                    </tr>
+                  ) : activeTab === 'contacts' ? (
+                    <tr>
+                      <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Nombre</th>
+                      <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-center">Cliente</th>
+                      <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-right">Acciones</th>
+                    </tr>
+                  ) : (
+                    <tr>
+                      <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Nombre</th>
+                      <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-center">Cliente</th>
+                      <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-right">Acciones</th>
+                    </tr>
+                  )}
                 </thead>
                 <tbody className="divide-y divide-slate-50">
                   {loading ? (
                     <tr>
                       <td colSpan={3} className="px-6 py-12 text-center text-slate-400">
                         <Loader2 className="animate-spin mx-auto mb-2" size={24} />
-                        Cargando clientes...
+                        Cargando data...
                       </td>
                     </tr>
-                  ) : filteredClients.length === 0 ? (
-                    <tr>
-                      <td colSpan={3} className="px-6 py-12 text-center text-slate-400">
-                        No se encontraron clientes.
-                      </td>
-                    </tr>
-                  ) : (
-                    filteredClients.map((client) => (
-                      <tr 
-                        key={client.id} 
-                        className={cn(
-                          "hover:bg-slate-50/50 transition-colors group cursor-pointer",
-                          selectedClient?.id === client.id && "bg-blue-50/50"
-                        )}
-                        onClick={() => setSelectedClient(client)}
-                      >
-                        <td className="px-6 py-4">
-                          <div className="font-bold text-slate-900">{client.name}</div>
-                          <div className="flex flex-wrap gap-2 items-center mt-0.5">
-                             <div className="text-[10px] text-slate-400 font-mono tracking-tighter">NIT: {client.nit || '---'}</div>
-                             {client.departments && (
-                               <span className="text-[9px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded flex items-center gap-1 uppercase tracking-wider font-bold">
-                                 <MapPin size={10} className="text-slate-400" />
-                                 {(client.departments as any).name}
-                               </span>
-                             )}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4">
-                           <div className="flex justify-center">
-                            <span className={cn(
-                              "flex items-center gap-1.5 px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider",
-                              client.is_active ? "bg-emerald-50 text-emerald-600" : "bg-slate-100 text-slate-400"
-                            )}>
-                              <span className={cn("w-1.5 h-1.5 rounded-full", client.is_active ? "bg-emerald-500" : "bg-slate-300")}></span>
-                              {client.is_active ? 'Activo' : 'Inactivo'}
-                            </span>
-                           </div>
-                        </td>
-                        <td className="px-6 py-4 text-right">
-                          <div className="flex items-center justify-end gap-2" onClick={e => e.stopPropagation()}>
-                            {canManage && (
-                              <>
-                                <button 
-                                  onClick={() => handleOpenModal(client)}
-                                  className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
-                                  title="Editar Cliente"
-                                >
-                                  <Edit2 size={18} />
-                                </button>
-                                <button 
-                                  onClick={() => {
-                                    setSelectedClient(client);
-                                    handleOpenContactModal();
-                                  }}
-                                  className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
-                                  title="Agregar Contacto"
-                                >
-                                  <UserPlus size={18} />
-                                </button>
-                                <StatusToggleButton 
-                                  isActive={client.is_active}
-                                  isUpdating={updatingId === client.id}
-                                  onConfirm={() => handleToggleStatus(client)}
-                                  confirmMessage={`¿Deseas ${client.is_active ? 'desactivar' : 'activar'} el cliente ${client.name}?`}
-                                />
-                              </>
-                            )}
-                            <button className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all">
-                              <ChevronRight size={18} />
-                            </button>
-                          </div>
+                  ) : activeTab === 'clients' ? (
+                    filteredClients.length === 0 ? (
+                      <tr>
+                        <td colSpan={3} className="px-6 py-12 text-center text-slate-400">No se encontraron clientes.</td>
+                      </tr>
+                    ) : (
+                      filteredClients.map((client) => (
+                        <tr 
+                          key={client.id} 
+                          className={cn(
+                            "hover:bg-slate-50/50 transition-colors group cursor-pointer",
+                            selectedClient?.id === client.id && "bg-blue-50/50"
+                          )}
+                          onClick={() => setSelectedClient(client)}
+                        >
+                          <td className="px-6 py-4">
+                            <div className="font-bold text-slate-900">{client.name}</div>
+                            <div className="flex flex-wrap gap-2 items-center mt-0.5">
+                               <div className="text-[10px] text-slate-400 font-mono tracking-tighter">NIT: {client.nit || '---'}</div>
+                               {client.departments && (
+                                 <span className="text-[9px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded flex items-center gap-1 uppercase tracking-wider font-bold">
+                                   <MapPin size={10} className="text-slate-400" />
+                                   {(client.departments as any).name}
+                                 </span>
+                               )}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 text-center">
+                             <div className="flex justify-center">
+                              <span className={cn(
+                                "flex items-center gap-1.5 px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider",
+                                client.is_active ? "bg-emerald-50 text-emerald-600" : "bg-slate-100 text-slate-400"
+                              )}>
+                                <span className={cn("w-1.5 h-1.5 rounded-full", client.is_active ? "bg-emerald-500" : "bg-slate-300")}></span>
+                                {client.is_active ? 'Activo' : 'Inactivo'}
+                              </span>
+                             </div>
+                          </td>
+                          <td className="px-6 py-4 text-right">
+                            <div className="flex items-center justify-end gap-2" onClick={e => e.stopPropagation()}>
+                              {canManage && (
+                                <>
+                                  <button onClick={() => handleOpenModal(client)} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all" title="Editar Cliente">
+                                    <Edit2 size={18} />
+                                  </button>
+                                  <button onClick={() => { setSelectedClient(client); handleOpenContactModal(); }} className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all" title="Agregar Contacto">
+                                    <UserPlus size={18} />
+                                  </button>
+                                  <StatusToggleButton isActive={client.is_active} isUpdating={updatingId === client.id} onConfirm={() => handleToggleStatus(client)} confirmMessage={`¿Deseas ${client.is_active ? 'desactivar' : 'activar'} el cliente ${client.name}?`} />
+                                </>
+                              )}
+                              <ChevronRight size={18} className="text-slate-300" />
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )
+                  ) : activeTab === 'contacts' ? (
+                    !selectedClient ? (
+                      <tr>
+                        <td colSpan={3} className="px-6 py-12 text-center text-slate-400">
+                          <Info className="mx-auto mb-2 opacity-50" size={24} />
+                          Selecciona un cliente para ver sus contactos.
                         </td>
                       </tr>
-                    ))
+                    ) : filteredContacts.length === 0 ? (
+                      <tr>
+                        <td colSpan={3} className="px-6 py-12 text-center text-slate-400">No se encontraron contactos para este cliente.</td>
+                      </tr>
+                    ) : (
+                      filteredContacts.map((contact) => (
+                        <tr 
+                          key={contact.id} 
+                          className="hover:bg-slate-50/50 transition-colors group cursor-pointer"
+                          onClick={() => {
+                            const client = clients.find(c => c.id === contact.client_id);
+                            if (client) setSelectedClient(client);
+                          }}
+                        >
+                          <td className="px-6 py-4">
+                            <div className="font-bold text-slate-900">{contact.full_name}</div>
+                            <div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{contact.position || 'Contacto'}</div>
+                          </td>
+                          <td className="px-6 py-4 text-center">
+                            <div className="text-xs font-medium text-slate-600">{(contact.clients as any)?.name}</div>
+                          </td>
+                          <td className="px-6 py-4 text-right">
+                            <div className="flex items-center justify-end gap-2" onClick={e => e.stopPropagation()}>
+                               <div className="flex flex-col items-end mr-3">
+                                  {contact.phone && <span className="text-[10px] text-slate-500">{contact.phone}</span>}
+                                  {contact.email && <span className="text-[10px] text-slate-400">{contact.email}</span>}
+                               </div>
+                               {canManage && (
+                                 <div className="flex items-center gap-1">
+                                   <StatusToggleButton 
+                                      isActive={contact.is_active}
+                                      isUpdating={updatingContactId === contact.id}
+                                      onConfirm={() => handleToggleContactStatus(contact)}
+                                      confirmMessage={`¿Deseas ${contact.is_active ? 'desactivar' : 'activar'} a ${contact.full_name}?`}
+                                      size="sm"
+                                    />
+                                    <button 
+                                      onClick={() => {
+                                        const client = clients.find(c => c.id === contact.client_id);
+                                        if (client) setSelectedClient(client);
+                                        handleOpenContactModal(contact);
+                                      }}
+                                      className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                      title="Editar Contacto"
+                                    >
+                                      <Edit2 size={16} />
+                                    </button>
+                                 </div>
+                               )}
+                               <ChevronRight size={18} className="text-slate-300" />
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )
+                  ) : (
+                    !selectedClient ? (
+                      <tr>
+                        <td colSpan={3} className="px-6 py-12 text-center text-slate-400">
+                          <Info className="mx-auto mb-2 opacity-50" size={24} />
+                          Selecciona un cliente para ver sus responsables.
+                        </td>
+                      </tr>
+                    ) : filteredCustodians.length === 0 ? (
+                      <tr>
+                        <td colSpan={3} className="px-6 py-12 text-center text-slate-400">No se encontraron responsables para este cliente.</td>
+                      </tr>
+                    ) : (
+                      filteredCustodians.map((custodian) => (
+                        <tr 
+                          key={custodian.id} 
+                          className="hover:bg-slate-50/50 transition-colors group cursor-pointer"
+                          onClick={() => {
+                            const client = clients.find(c => c.id === custodian.client_id);
+                            if (client) setSelectedClient(client);
+                          }}
+                        >
+                          <td className="px-6 py-4">
+                            <div className="font-bold text-slate-900">{custodian.full_name}</div>
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[10px] text-purple-600 font-bold uppercase tracking-widest">{custodian.job_title || 'Responsable'}</span>
+                              <span className="text-[9px] text-slate-300">•</span>
+                              <span className="text-[9px] text-slate-400 uppercase">{custodian.department}</span>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 text-center">
+                            <div className="text-xs font-medium text-slate-600">{(custodian.clients as any)?.name}</div>
+                          </td>
+                          <td className="px-6 py-4 text-right">
+                             <div className="flex items-center justify-end gap-2" onClick={e => e.stopPropagation()}>
+                               <div className="flex flex-col items-end mr-3">
+                                  {custodian.phone && <span className="text-[10px] text-slate-500">{custodian.phone}</span>}
+                                  {custodian.email && <span className="text-[10px] text-slate-400">{custodian.email}</span>}
+                               </div>
+                               {canManage && (
+                                 <div className="flex items-center gap-1">
+                                   <StatusToggleButton 
+                                      isActive={custodian.is_active}
+                                      isUpdating={updatingCustodianId === custodian.id}
+                                      onConfirm={() => handleToggleCustodianStatus(custodian)}
+                                      confirmMessage={`¿Deseas ${custodian.is_active ? 'desactivar' : 'activar'} a ${custodian.full_name}?`}
+                                      size="sm"
+                                    />
+                                    <button 
+                                      onClick={() => {
+                                        const client = clients.find(c => c.id === custodian.client_id);
+                                        if (client) setSelectedClient(client);
+                                        handleOpenCustodianModal(custodian);
+                                      }}
+                                      className="p-1.5 text-slate-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
+                                      title="Editar Responsable"
+                                    >
+                                      <Edit2 size={16} />
+                                    </button>
+                                 </div>
+                               )}
+                               <ChevronRight size={18} className="text-slate-300" />
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )
                   )}
                 </tbody>
               </table>
@@ -618,88 +878,148 @@ export function Clients() {
               {loading ? (
                 <div className="p-12 text-center text-slate-400">
                   <Loader2 className="animate-spin mx-auto mb-2" size={24} />
-                  Cargando clientes...
+                  Cargando data...
                 </div>
-              ) : filteredClients.length === 0 ? (
-                <div className="p-12 text-center text-slate-400">
-                  No se encontraron clientes.
-                </div>
-              ) : (
-                filteredClients.map((client) => (
-                  <div 
-                    key={client.id}
-                    className={cn(
-                      "p-5 space-y-4 active:bg-slate-50 transition-colors",
-                      selectedClient?.id === client.id && "bg-blue-50/30"
-                    )}
-                    onClick={() => setSelectedClient(client)}
-                  >
-                    <div className="flex justify-between items-start">
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                           <span className={cn(
-                            "px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-widest",
-                            client.is_active ? "bg-emerald-50 text-emerald-600 border border-emerald-100" : "bg-slate-50 text-slate-400 border border-slate-100"
-                          )}>
-                            {client.is_active ? 'Activo' : 'Inactivo'}
-                          </span>
-                          {client.departments && (
-                            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1">
-                              <MapPin size={10} />
-                              {(client.departments as any).name}
+              ) : activeTab === 'clients' ? (
+                filteredClients.length === 0 ? (
+                  <div className="p-12 text-center text-slate-400">No se encontraron clientes.</div>
+                ) : (
+                  filteredClients.map((client) => (
+                    <div 
+                      key={client.id}
+                      className={cn(
+                        "p-5 space-y-4 active:bg-slate-50 transition-colors",
+                        selectedClient?.id === client.id && "bg-blue-50/30"
+                      )}
+                      onClick={() => setSelectedClient(client)}
+                    >
+                      <div className="flex justify-between items-start">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                             <span className={cn(
+                              "px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-widest",
+                              client.is_active ? "bg-emerald-50 text-emerald-600 border border-emerald-100" : "bg-slate-50 text-slate-400 border border-slate-100"
+                            )}>
+                              {client.is_active ? 'Activo' : 'Inactivo'}
                             </span>
-                          )}
+                          </div>
+                          <h4 className="font-bold text-slate-800 text-base">{client.name}</h4>
                         </div>
-                        <h4 className="font-bold text-slate-800 text-base">{client.name}</h4>
-                        {client.trade_name && (
-                          <p className="text-xs text-slate-500 font-medium">{client.trade_name}</p>
-                        )}
-                      </div>
-
-                      <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
-                        {canManage && (
-                          <>
-                            <button 
-                              onClick={() => handleOpenModal(client)}
-                              className="w-10 h-10 flex items-center justify-center bg-blue-50 text-blue-600 rounded-xl"
-                            >
-                              <Edit2 size={20} />
-                            </button>
-                            <button 
-                              onClick={() => {
-                                setSelectedClient(client);
-                                handleOpenContactModal();
-                              }}
-                              className="w-10 h-10 flex items-center justify-center bg-indigo-50 text-indigo-600 rounded-xl"
-                            >
-                              <UserPlus size={20} />
-                            </button>
-                            <StatusToggleButton 
-                              isActive={client.is_active}
-                              isUpdating={updatingId === client.id}
-                              onConfirm={() => handleToggleStatus(client)}
-                              confirmMessage={`¿Deseas ${client.is_active ? 'desactivar' : 'activar'} el cliente ${client.name}?`}
-                            />
-                          </>
-                        )}
-                        <button className="w-10 h-10 flex items-center justify-center bg-slate-50 text-slate-400 rounded-xl">
-                          <ChevronRight size={20} />
-                        </button>
+                        <ChevronRight size={20} className="text-slate-300" />
                       </div>
                     </div>
-
-                    <div className="flex items-center justify-between pt-2 border-t border-slate-50">
-                      <div className="flex flex-col">
-                        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">NIT</span>
-                        <span className="text-[11px] font-mono font-medium text-slate-600">{client.nit || '---'}</span>
-                      </div>
-                      <div className="flex flex-col text-right">
-                        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">NRC</span>
-                        <span className="text-[11px] font-mono font-medium text-slate-600">{client.nrc || '---'}</span>
-                      </div>
-                    </div>
+                  ))
+                )
+              ) : activeTab === 'contacts' ? (
+                !selectedClient ? (
+                  <div className="p-12 text-center text-slate-400">
+                    <Info className="mx-auto mb-2 opacity-50" size={24} />
+                    Selecciona un cliente para ver sus contactos.
                   </div>
-                ))
+                ) : filteredContacts.length === 0 ? (
+                  <div className="p-12 text-center text-slate-400">No se encontraron contactos para este cliente.</div>
+                ) : (
+                  filteredContacts.map((contact) => (
+                    <div 
+                      key={contact.id}
+                      className="p-5 active:bg-slate-50 transition-colors"
+                      onClick={() => {
+                        const client = clients.find(c => c.id === contact.client_id);
+                        if (client) setSelectedClient(client);
+                      }}
+                    >
+                      <div className="flex justify-between items-center">
+                        <div className="flex items-center gap-3">
+                          <span className={cn("w-2 h-2 rounded-full shrink-0", contact.is_active ? "bg-emerald-500" : "bg-slate-300")}></span>
+                          <div>
+                            <div className="text-[8px] text-blue-600 font-bold uppercase tracking-widest mb-1">{(contact.clients as any)?.name}</div>
+                            <h4 className="font-bold text-slate-800 text-sm">{contact.full_name}</h4>
+                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{contact.position || 'Contacto'}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          {canManage && (
+                            <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+                              <StatusToggleButton 
+                                isActive={contact.is_active}
+                                isUpdating={updatingContactId === contact.id}
+                                onConfirm={() => handleToggleContactStatus(contact)}
+                                confirmMessage={`¿Deseas ${contact.is_active ? 'desactivar' : 'activar'} a ${contact.full_name}?`}
+                                size="sm"
+                              />
+                              <button 
+                                onClick={() => {
+                                  const client = clients.find(c => c.id === contact.client_id);
+                                  if (client) setSelectedClient(client);
+                                  handleOpenContactModal(contact);
+                                }}
+                                className="w-8 h-8 flex items-center justify-center bg-blue-50 text-blue-600 rounded-lg"
+                              >
+                                <Edit2 size={16} />
+                              </button>
+                            </div>
+                          )}
+                          <ChevronRight size={20} className="text-slate-300" />
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )
+              ) : (
+                !selectedClient ? (
+                  <div className="p-12 text-center text-slate-400">
+                    <Info className="mx-auto mb-2 opacity-50" size={24} />
+                    Selecciona un cliente para ver sus responsables.
+                  </div>
+                ) : filteredCustodians.length === 0 ? (
+                  <div className="p-12 text-center text-slate-400">No se encontraron responsables para este cliente.</div>
+                ) : (
+                  filteredCustodians.map((custodian) => (
+                    <div 
+                      key={custodian.id}
+                      className="p-5 active:bg-slate-50 transition-colors"
+                      onClick={() => {
+                        const client = clients.find(c => c.id === custodian.client_id);
+                        if (client) setSelectedClient(client);
+                      }}
+                    >
+                      <div className="flex justify-between items-center">
+                        <div className="flex items-center gap-3">
+                          <span className={cn("w-2 h-2 rounded-full shrink-0", custodian.is_active ? "bg-purple-500" : "bg-slate-300")}></span>
+                          <div>
+                            <div className="text-[8px] text-purple-600 font-bold uppercase tracking-widest mb-1">{(custodian.clients as any)?.name}</div>
+                            <h4 className="font-bold text-slate-800 text-sm">{custodian.full_name}</h4>
+                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{custodian.job_title || 'Responsable'}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          {canManage && (
+                            <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+                              <StatusToggleButton 
+                                isActive={custodian.is_active}
+                                isUpdating={updatingCustodianId === custodian.id}
+                                onConfirm={() => handleToggleCustodianStatus(custodian)}
+                                confirmMessage={`¿Deseas ${custodian.is_active ? 'desactivar' : 'activar'} a ${custodian.full_name}?`}
+                                size="sm"
+                              />
+                              <button 
+                                onClick={() => {
+                                  const client = clients.find(c => c.id === custodian.client_id);
+                                  if (client) setSelectedClient(client);
+                                  handleOpenCustodianModal(custodian);
+                                }}
+                                className="w-8 h-8 flex items-center justify-center bg-purple-50 text-purple-600 rounded-lg"
+                              >
+                                <Edit2 size={16} />
+                              </button>
+                            </div>
+                          )}
+                          <ChevronRight size={20} className="text-slate-300" />
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )
               )}
             </div>
           </div>
@@ -1005,7 +1325,20 @@ export function Clients() {
                 </button>
               </div>
 
-              <form onSubmit={handleRegisterClient} className="p-6 overflow-y-auto space-y-6">
+              <div className="px-6 py-2">
+                <AnimatePresence mode="wait">
+                  {modalMessage && (
+                    <FeedbackAlert 
+                      type={modalMessage.type as any} 
+                      message={modalMessage.text} 
+                      onClose={() => setModalMessage(null)}
+                      className="my-2"
+                    />
+                  )}
+                </AnimatePresence>
+              </div>
+
+              <form onSubmit={handleRegisterClient} className="p-6 pt-2 overflow-y-auto space-y-6">
                 {/* General Info */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-1.5">
@@ -1213,7 +1546,20 @@ export function Clients() {
                 </button>
               </div>
 
-              <form onSubmit={handleSaveCustodian} className="p-6 space-y-4">
+              <div className="px-6 py-2">
+                <AnimatePresence mode="wait">
+                  {modalMessage && (
+                    <FeedbackAlert 
+                      type={modalMessage.type as any} 
+                      message={modalMessage.text} 
+                      onClose={() => setModalMessage(null)}
+                      className="my-2"
+                    />
+                  )}
+                </AnimatePresence>
+              </div>
+
+              <form onSubmit={handleSaveCustodian} className="p-6 pt-2 space-y-4">
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Nombre Completo (Responsable)</label>
                   <input 
@@ -1350,7 +1696,20 @@ export function Clients() {
                 </button>
               </div>
 
-              <form onSubmit={handleSaveContact} className="p-6 space-y-4">
+              <div className="px-6 py-2">
+                <AnimatePresence mode="wait">
+                  {modalMessage && (
+                    <FeedbackAlert 
+                      type={modalMessage.type as any} 
+                      message={modalMessage.text} 
+                      onClose={() => setModalMessage(null)}
+                      className="my-2"
+                    />
+                  )}
+                </AnimatePresence>
+              </div>
+
+              <form onSubmit={handleSaveContact} className="p-6 pt-2 space-y-4">
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Nombre Completo</label>
                   <input 

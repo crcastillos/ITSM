@@ -4,6 +4,7 @@ import { Asset } from '../types';
 import { Plus, Search, Monitor, Laptop, Server, Smartphone, HardDrive, Printer, Filter, X, Loader2, Edit2, FileText, Hash, Building2, Calendar, User, MapPin, ShieldCheck, Tag, Info, Save } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { StatusToggleButton } from '../components/StatusToggleButton';
+import { FeedbackAlert } from '../components/FeedbackAlert';
 import { cn } from '../lib/utils';
 import { useAuth } from '../hooks/useAuth';
 
@@ -17,6 +18,8 @@ export function Assets() {
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [pageMessage, setPageMessage] = useState<{ type: 'success' | 'error' | 'info' | 'warning', text: string } | null>(null);
+  const [modalMessage, setModalMessage] = useState<{ type: 'success' | 'error' | 'info' | 'warning', text: string } | null>(null);
 
   // Form states
   const [assetTypes, setAssetTypes] = useState<{id: number, name: string}[]>([]);
@@ -78,6 +81,7 @@ export function Assets() {
   };
 
   const handleOpenModal = (asset?: Asset) => {
+    setModalMessage(null);
     if (asset) {
       setSelectedAsset(asset);
       setFormData({
@@ -122,6 +126,7 @@ export function Assets() {
     e.preventDefault();
     if (submitting) return;
     setSubmitting(true);
+    setModalMessage(null);
 
     try {
       const payload = {
@@ -156,9 +161,13 @@ export function Assets() {
 
       await fetchAssets();
       setIsModalOpen(false);
-      alert(selectedAsset ? 'Activo actualizado correctamente' : 'Activo registrado correctamente');
+      setPageMessage({ 
+        type: 'success', 
+        text: selectedAsset ? 'Los datos del activo han sido actualizados.' : 'El activo ha sido registrado exitosamente en el inventario.' 
+      });
+      setTimeout(() => setPageMessage(null), 4000);
     } catch (err: any) {
-      alert(`Error al guardar activo: ${err.message}`);
+      setModalMessage({ type: 'error', text: `Error al guardar activo: ${err.message}` });
     } finally {
       setSubmitting(false);
     }
@@ -167,6 +176,7 @@ export function Assets() {
   const handleToggleStatus = async (asset: Asset) => {
     const newStatus = !asset.is_active;
     setUpdatingId(asset.id);
+    setPageMessage(null);
     try {
       const { error } = await supabase
         .from('assets')
@@ -175,8 +185,10 @@ export function Assets() {
 
       if (error) throw error;
       setAssets(prev => prev.map(a => a.id === asset.id ? { ...a, is_active: newStatus } : a));
+      setPageMessage({ type: 'success', text: `Activo ${asset.name} ${newStatus ? 'activado' : 'desactivado'}.` });
+      setTimeout(() => setPageMessage(null), 3000);
     } catch (err: any) {
-      alert(`Error al actualizar estado: ${err.message}`);
+      setPageMessage({ type: 'error', text: `Error al actualizar estado: ${err.message}` });
     } finally {
       setUpdatingId(null);
     }
@@ -204,6 +216,18 @@ export function Assets() {
 
   return (
     <div className="space-y-6">
+      <AnimatePresence>
+        {pageMessage && (
+          <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[100] w-full max-w-md px-4">
+            <FeedbackAlert 
+              type={pageMessage.type as any} 
+              message={pageMessage.text} 
+              onClose={() => setPageMessage(null)}
+            />
+          </div>
+        )}
+      </AnimatePresence>
+
       <header className="flex flex-col md:flex-row justify-between items-start md:items-center min-h-[4rem] md:h-16 border-b border-slate-200 -mx-6 px-6 pl-14 md:pl-6 -mt-8 bg-white mb-8 py-3 md:py-0 gap-4 md:gap-0">
         <div className="flex items-center space-x-2 text-sm">
           <span className="text-slate-400">Módulos /</span>
@@ -395,7 +419,20 @@ export function Assets() {
                 </button>
               </div>
 
-              <form onSubmit={handleSubmit} className="p-6 overflow-y-auto">
+              <div className="px-6 py-2">
+                <AnimatePresence mode="wait">
+                  {modalMessage && (
+                    <FeedbackAlert 
+                      type={modalMessage.type as any} 
+                      message={modalMessage.text} 
+                      onClose={() => setModalMessage(null)}
+                      className="my-2"
+                    />
+                  )}
+                </AnimatePresence>
+              </div>
+
+              <form onSubmit={handleSubmit} className="p-6 pt-2 overflow-y-auto">
                 <div className="space-y-8">
                   {/* Section 1: Identification */}
                   <section>

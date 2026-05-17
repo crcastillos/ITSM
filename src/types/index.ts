@@ -93,7 +93,21 @@ export interface Service {
   description: string | null;
   category_id: number;
   priority_id: number;
+  sla_hours: number;
+  service_type: string;
+  service_owner: string | null;
+  availability_schedule: string | null;
+  request_canals: string[];
+  technical_dependencies: string | null;
+  cost_center: string | null;
   is_active: boolean;
   service_categories?: { name: string };
   service_priorities?: { name: string };
+}
+
+export interface LookupTable {
+  id: number;
+  name: string;
+  description?: string;
+  is_active: boolean;
 }

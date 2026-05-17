@@ -57,6 +57,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         profileData.roles = profileData.roles[0];
       }
       
+      console.log('Profile fetched:', profileData);
+      console.log('User Role Name:', profileData.roles?.name);
+      
       setProfile(profileData);
     } catch (error) {
       console.error('Error fetching profile:', error);

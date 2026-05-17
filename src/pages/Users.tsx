@@ -24,11 +24,13 @@ import { createClient } from '@supabase/supabase-js';
 import { Navigate } from 'react-router-dom';
 
 import { StatusToggleButton } from '../components/StatusToggleButton';
+import { FeedbackAlert } from '../components/FeedbackAlert';
 
 export function Users() {
   const { user: currentUser, isAdmin, isGerente, loading: authLoading } = useAuth();
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
+  const [pageMessage, setPageMessage] = useState<{ type: 'success' | 'error' | 'info' | 'warning', text: string } | null>(null);
 
   // Redirect if not admin
   if (!authLoading && !isAdmin) {
@@ -44,7 +46,6 @@ export function Users() {
   const [fullName, setFullName] = useState('');
   const [roleId, setRoleId] = useState<number>(3); // 3 = Soporte TI
   const [isFormSubmitting, setIsFormSubmitting] = useState(false);
-  const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
 
   // Cliente temporal para crear usuarios sin afectar la sesión del admin
@@ -120,7 +121,7 @@ export function Users() {
     setEmail(userToEdit.email);
     setRoleId(userToEdit.role_id);
     setPassword(''); 
-    setMessage(null);
+    setPageMessage(null);
     // Scroll to top to see edit form
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -131,14 +132,14 @@ export function Users() {
     setEmail('');
     setPassword('');
     setRoleId(roles[0]?.id || 3);
-    setMessage(null);
+    setPageMessage(null);
   };
 
   const handleToggleStatus = async (user: UserProfile) => {
     const newStatus = !user.is_active;
     
     setUpdatingId(user.id);
-    setMessage(null);
+    setPageMessage(null);
     try {
       const { error } = await supabase
         .from('user_profiles')
@@ -148,13 +149,12 @@ export function Users() {
       if (error) throw error;
       
       setUsers(prev => prev.map(u => u.id === user.id ? { ...u, is_active: newStatus } : u));
-      setMessage({ type: 'success', text: `Usuario ${newStatus ? 'activado' : 'desactivado'} correctamente.` });
+      setPageMessage({ type: 'success', text: `Usuario ${newStatus ? 'activado' : 'desactivado'} correctamente.` });
       
       // Auto-clear message
-      setTimeout(() => setMessage(null), 3000);
+      setTimeout(() => setPageMessage(null), 3000);
     } catch (err: any) {
-      setMessage({ type: 'error', text: `Error al cambiar estado: ${err.message}` });
-      alert(`Error al cambiar estado: ${err.message}`);
+      setPageMessage({ type: 'error', text: `Error al cambiar estado: ${err.message}` });
     } finally {
       setUpdatingId(null);
     }
@@ -163,7 +163,7 @@ export function Users() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsFormSubmitting(true);
-    setMessage(null);
+    setPageMessage(null);
 
     try {
       const trimmedEmail = email.trim().toLowerCase();
@@ -199,7 +199,7 @@ export function Users() {
             });
             if (authError) {
               console.warn('Profile updated but password change failed:', authError);
-              setMessage({ type: 'error', text: `Perfil ok, pero error al cambiar clave: ${authError.message}` });
+              setPageMessage({ type: 'error', text: `Perfil ok, pero error al cambiar clave: ${authError.message}` });
               return;
             }
           } else {
@@ -211,14 +211,14 @@ export function Users() {
                 redirectTo: window.location.origin
               });
               if (resetError) throw resetError;
-              setMessage({ type: 'success', text: 'Perfil actualizado y correo de restablecimiento enviado.' });
+              setPageMessage({ type: 'success', text: 'Perfil actualizado y correo de restablecimiento enviado.' });
               setTimeout(resetForm, 2000);
               return;
             }
           }
         }
         
-        setMessage({ type: 'success', text: 'Perfil actualizado correctamente.' });
+        setPageMessage({ type: 'success', text: 'Perfil actualizado correctamente.' });
         setTimeout(resetForm, 1500);
       } else {
         // CREATE NEW USER (Usando cliente temporal para no perder la sesión del admin)
@@ -249,14 +249,14 @@ export function Users() {
           throw new Error(errorMsg);
         }
         
-        setMessage({ type: 'success', text: 'Usuario registrado exitosamente.' });
+        setPageMessage({ type: 'success', text: 'Usuario registrado exitosamente.' });
         resetForm();
       }
       
       fetchUsers();
     } catch (err: any) {
       console.error('Error en handleSubmit:', err);
-      setMessage({ type: 'error', text: err.message || 'Ocurrió un error inesperado' });
+      setPageMessage({ type: 'error', text: err.message || 'Ocurrió un error inesperado' });
     } finally {
       setIsFormSubmitting(false);
     }
@@ -264,6 +264,18 @@ export function Users() {
 
   return (
     <div className="space-y-8">
+      <AnimatePresence>
+        {pageMessage && (
+          <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[100] w-full max-w-md px-4">
+            <FeedbackAlert 
+              type={pageMessage.type as any} 
+              message={pageMessage.text} 
+              onClose={() => setPageMessage(null)}
+            />
+          </div>
+        )}
+      </AnimatePresence>
+
       <header className="flex flex-col md:flex-row justify-between items-start md:items-center min-h-[4rem] md:h-16 border-b border-slate-200 -mx-6 px-6 pl-14 md:pl-6 -mt-8 bg-white mb-8 py-3 md:py-0">
         <div className="flex items-center space-x-2 text-sm">
           <span className="text-slate-400">Configuración /</span>
@@ -272,18 +284,6 @@ export function Users() {
       </header>
 
       <div className="flex flex-col gap-4 mb-6">
-        {message && (
-          <motion.div 
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className={`p-4 rounded-xl text-sm font-medium flex items-center gap-3 border shadow-sm ${
-              message.type === 'success' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-red-50 text-red-700 border-red-100'
-            }`}
-          >
-            <AlertCircle size={18} />
-            {message.text}
-          </motion.div>
-        )}
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
