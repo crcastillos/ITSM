@@ -208,7 +208,7 @@ export function Users() {
             // We'll offer to send a reset email instead or inform them.
             if (window.confirm('No se puede setear la clave de otro usuario directamente por seguridad. ¿Deseas enviar un correo de restablecimiento a ' + editingUser.email + '?')) {
               const { error: resetError } = await supabase.auth.resetPasswordForEmail(editingUser.email, {
-                redirectTo: window.location.origin + '/login'
+                redirectTo: window.location.origin
               });
               if (resetError) throw resetError;
               setMessage({ type: 'success', text: 'Perfil actualizado y correo de restablecimiento enviado.' });

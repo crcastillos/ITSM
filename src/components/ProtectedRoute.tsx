@@ -21,7 +21,7 @@ export function ProtectedRoute({ allowedRoles }: ProtectedRouteProps) {
   }
 
   if (!user) {
-    return <Navigate to="/login" replace />;
+    return <Navigate to={`/login${window.location.search}${window.location.hash}`} replace />;
   }
 
   // Si está autenticado pero no tiene perfil
