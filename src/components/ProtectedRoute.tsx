@@ -8,6 +8,13 @@ interface ProtectedRouteProps {
 
 export function ProtectedRoute({ allowedRoles }: ProtectedRouteProps) {
   const { profile, loading, user } = useAuth();
+  
+  // Si detectamos que es un enlace de recuperación, forzamos ir a login
+  const isRecovery = window.location.hash.includes('type=recovery') || window.location.search.includes('type=recovery');
+
+  if (isRecovery) {
+    return <Navigate to={`/login${window.location.search}${window.location.hash}`} replace />;
+  }
 
   if (loading) {
     return (
